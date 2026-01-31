@@ -82,6 +82,7 @@ jobs:
             build/daemon/appimage-manager-daemon
             build/gui/appimage-manager-gui
             build/appimage-manager.AppImage
+          retention-days: 30
 
       - name: Upload artifacts (release)
         if: github.event_name == 'workflow_dispatch'
@@ -117,12 +118,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: appimage-manager-${{ github.ref_name }}
+          path: artifacts
 
       - name: Download artifacts (manual)
         if: github.event_name == 'workflow_dispatch'
         uses: actions/download-artifact@v4
         with:
           name: release-build
+          path: artifacts
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -130,9 +133,9 @@ jobs:
           tag_name: ${{ steps.tag.outputs.name }}
           name: ${{ steps.tag.outputs.name }}
           files: |
-            build/daemon/appimage-manager-daemon
-            build/gui/appimage-manager-gui
-            build/appimage-manager.AppImage
+            artifacts/build/daemon/appimage-manager-daemon
+            artifacts/build/gui/appimage-manager-gui
+            artifacts/build/appimage-manager.AppImage
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
