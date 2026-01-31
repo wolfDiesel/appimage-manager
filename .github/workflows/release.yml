@@ -67,18 +67,13 @@ jobs:
       - name: Build
         run: cmake --build build -j4
 
-      - name: Upload AppImage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: appimage-manager-${{ github.event.inputs.version }}
-          path: build/appimage-manager.AppImage
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.event.inputs.version }}
           name: v${{ github.event.inputs.version }}
           files: |
+            build/appimage-manager.AppImage
             build/daemon/appimage-manager-daemon
             build/gui/appimage-manager-gui
           generate_release_notes: true
