@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=AppImage Manager
+Comment=Manage AppImage applications
+Exec=appimage-manager
+Icon=appimage-manager
+Categories=Utility;

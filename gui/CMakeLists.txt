@@ -1,0 +1,40 @@
+qt_generate_moc(
+  ${CMAKE_CURRENT_SOURCE_DIR}/main_window.hpp
+  ${CMAKE_CURRENT_BINARY_DIR}/moc_main_window.cpp
+)
+qt_generate_moc(
+  ${CMAKE_CURRENT_SOURCE_DIR}/app_settings_dialog.hpp
+  ${CMAKE_CURRENT_BINARY_DIR}/moc_app_settings_dialog.cpp
+)
+qt_generate_moc(
+  ${CMAKE_CURRENT_SOURCE_DIR}/watch_directories_dialog.hpp
+  ${CMAKE_CURRENT_BINARY_DIR}/moc_watch_directories_dialog.cpp
+)
+qt_generate_moc(
+  ${CMAKE_CURRENT_SOURCE_DIR}/install_app_image_dialog.hpp
+  ${CMAKE_CURRENT_BINARY_DIR}/moc_install_app_image_dialog.cpp
+)
+add_executable(appimage-manager-gui
+  main.cpp
+  main_window.cpp
+  app_settings_dialog.cpp
+  watch_directories_dialog.cpp
+  install_app_image_dialog.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/moc_main_window.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/moc_app_settings_dialog.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/moc_watch_directories_dialog.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/moc_install_app_image_dialog.cpp
+)
+target_include_directories(appimage-manager-gui PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_BINARY_DIR}
+)
+target_link_libraries(appimage-manager-gui PRIVATE
+  appimage-manager-core
+  Qt6::Core
+  Qt6::Widgets
+  Qt6::DBus
+  Qt6::Network
+)
+
+install(TARGETS appimage-manager-gui RUNTIME DESTINATION bin)

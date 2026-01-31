@@ -1,0 +1,16 @@
+build/
+*.o
+*.a
+*.so
+*.user
+*.autosave
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.moc.cpp
+*.moc
+.qmake.stash
+build_output.txt
+packaging/appimage/AppDir/
+*.AppImage
