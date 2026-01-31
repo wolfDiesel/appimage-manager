@@ -8,6 +8,7 @@ qt_generate_moc(
 )
 add_executable(appimage-manager-daemon
   main.cpp
+  desktop_notification.cpp
   directory_watcher.cpp
   dbus_manager_adaptor.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/moc_directory_watcher.cpp
@@ -35,6 +36,7 @@ if(BUILD_TESTS)
   add_executable(appimage-manager-daemon-adaptor-test
     test_dbus_adaptor.cpp
     dbus_manager_adaptor.cpp
+    desktop_notification.cpp
     directory_watcher.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/moc_dbus_manager_adaptor.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/moc_directory_watcher.cpp
@@ -52,4 +54,5 @@ if(BUILD_TESTS)
   add_test(NAME daemon_adaptor_getallrecords_empty COMMAND appimage-manager-daemon-adaptor-test 1)
   add_test(NAME daemon_adaptor_remove_appimage COMMAND appimage-manager-daemon-adaptor-test 2)
   add_test(NAME daemon_adaptor_remove_appimage_unknown_id COMMAND appimage-manager-daemon-adaptor-test 3)
+  add_test(NAME daemon_desktop_notification COMMAND appimage-manager-daemon-adaptor-test 4)
 endif()

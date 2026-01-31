@@ -1,4 +1,5 @@
 #include "dbus_manager_adaptor.hpp"
+#include "desktop_notification.hpp"
 #include <domain/entities/app_image_record.hpp>
 #include <domain/entities/config.hpp>
 #include <domain/entities/install_type.hpp>
@@ -153,6 +154,11 @@ int test_remove_appimage_removes_record_and_returns_true() {
   return 0;
 }
 
+int test_notify_appimage_processed_does_not_crash() {
+  appimage_manager::daemon::notify_appimage_processed("Test.AppImage", "/tmp");
+  return 0;
+}
+
 int test_remove_appimage_unknown_id_returns_false() {
   MockRegistryRepository registry;
   MockConfigRepository config_repo;
@@ -172,13 +178,16 @@ int main(int argc, char* argv[]) {
   QCoreApplication app(argc, argv);
   if (argc >= 2) {
     int n = std::atoi(argv[1]);
+    if (n == 0) return test_getallrecords_returns_maps_with_required_keys() == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
     if (n == 1) return test_getallrecords_empty_registry_returns_empty_list() == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
     if (n == 2) return test_remove_appimage_removes_record_and_returns_true() == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
     if (n == 3) return test_remove_appimage_unknown_id_returns_false() == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+    if (n == 4) return test_notify_appimage_processed_does_not_crash() == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
   }
   if (test_getallrecords_returns_maps_with_required_keys() != 0) return EXIT_FAILURE;
   if (test_getallrecords_empty_registry_returns_empty_list() != 0) return EXIT_FAILURE;
   if (test_remove_appimage_removes_record_and_returns_true() != 0) return EXIT_FAILURE;
   if (test_remove_appimage_unknown_id_returns_false() != 0) return EXIT_FAILURE;
+  if (test_notify_appimage_processed_does_not_crash() != 0) return EXIT_FAILURE;
   return EXIT_SUCCESS;
 }
