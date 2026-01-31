@@ -22,12 +22,12 @@ private Q_SLOTS:
   void start_install();
   void download_finished();
   void download_progress(qint64 received, qint64 total);
-  void fetch_github_finished();
+  void fetch_github_releases_finished();
 
 private:
   void load_watch_directories();
   void set_busy(bool busy);
-  QString github_release_url(const QString& spec) const;
+  QString github_releases_url(const QString& spec) const;
   void start_download(const QUrl& url, const QString& suggested_name);
   QString suggested_filename(const QUrl& url) const;
 

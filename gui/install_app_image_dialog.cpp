@@ -1,4 +1,6 @@
 #include "install_app_image_dialog.hpp"
+#include "github_release_selector.hpp"
+#include "appimage_asset_selector.hpp"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGroupBox>
@@ -105,14 +107,14 @@ void InstallAppImageDialog::set_busy(bool busy) {
   }
 }
 
-QString InstallAppImageDialog::github_release_url(const QString& spec) const {
+QString InstallAppImageDialog::github_releases_url(const QString& spec) const {
   QString s = spec.trimmed();
   if (s.isEmpty()) return QString();
   s.replace(QStringLiteral("https://github.com/"), QString());
   s.replace(QStringLiteral("github.com/"), QString());
   int i = s.indexOf(QLatin1Char('/'));
   if (i <= 0 || i == s.size() - 1) return QString();
-  return QStringLiteral("https://api.github.com/repos/%1/releases/latest").arg(s);
+  return QStringLiteral("https://api.github.com/repos/%1/releases?per_page=10").arg(s);
 }
 
 void InstallAppImageDialog::start_install() {
@@ -122,7 +124,7 @@ void InstallAppImageDialog::start_install() {
     return;
   }
   if (github_radio_->isChecked()) {
-    QString api_url = github_release_url(github_edit_->text());
+    QString api_url = github_releases_url(github_edit_->text());
     if (api_url.isEmpty()) {
       QMessageBox::warning(this, tr("Error"), tr("Enter GitHub repository as username/repository."));
       return;
@@ -133,7 +135,7 @@ void InstallAppImageDialog::start_install() {
     req.setRawHeader("User-Agent", github_user_agent);
     req.setRawHeader("Accept", "application/vnd.github.v3+json");
     QNetworkReply* reply = nam_->get(req);
-    connect(reply, &QNetworkReply::finished, this, &InstallAppImageDialog::fetch_github_finished);
+    connect(reply, &QNetworkReply::finished, this, &InstallAppImageDialog::fetch_github_releases_finished);
     active_reply_ = reply;
     return;
   }
@@ -145,7 +147,7 @@ void InstallAppImageDialog::start_install() {
   start_download(url, suggested_filename(url));
 }
 
-void InstallAppImageDialog::fetch_github_finished() {
+void InstallAppImageDialog::fetch_github_releases_finished() {
   QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
   if (!reply) return;
   reply->deleteLater();
@@ -157,28 +159,38 @@ void InstallAppImageDialog::fetch_github_finished() {
   }
   QJsonParseError err;
   QJsonDocument doc = QJsonDocument::fromJson(reply->readAll(), &err);
-  if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+  if (err.error != QJsonParseError::NoError || !doc.isArray()) {
     QMessageBox::warning(this, tr("Error"), tr("Invalid GitHub response."));
     return;
   }
-  QJsonObject obj = doc.object();
-  QJsonArray assets = obj.value(QStringLiteral("assets")).toArray();
-  QString download_url;
-  QString asset_name;
-  for (const QJsonValue& v : assets) {
-    QJsonObject a = v.toObject();
-    QString name = a.value(QStringLiteral("name")).toString();
-    if (name.endsWith(QLatin1String(".AppImage"), Qt::CaseInsensitive)) {
-      download_url = a.value(QStringLiteral("browser_download_url")).toString();
-      asset_name = name;
-      break;
-    }
-  }
-  if (download_url.isEmpty()) {
-    QMessageBox::warning(this, tr("Error"), tr("No AppImage asset found in latest release."));
+  QJsonArray releases = doc.array();
+  if (releases.isEmpty()) {
+    QMessageBox::warning(this, tr("Error"), tr("No releases found for this repository."));
     return;
   }
-  start_download(QUrl(download_url), asset_name);
+  
+  GitHubReleaseSelector selector(releases, this);
+  if (selector.exec() != QDialog::Accepted)
+    return;
+  
+  QJsonArray assets = selector.selected_assets();
+  if (assets.isEmpty()) {
+    QMessageBox::warning(this, tr("Error"), tr("Selected release has no assets."));
+    return;
+  }
+  
+  AppImageAssetSelector asset_selector(assets, this);
+  if (asset_selector.exec() != QDialog::Accepted)
+    return;
+  
+  QString url = asset_selector.selected_url();
+  QString name = asset_selector.selected_name();
+  if (url.isEmpty() || name.isEmpty()) {
+    QMessageBox::warning(this, tr("Error"), tr("No asset selected."));
+    return;
+  }
+  
+  start_download(QUrl(url), name);
 }
 
 void InstallAppImageDialog::start_download(const QUrl& url, const QString& suggested_name) {

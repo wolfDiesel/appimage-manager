@@ -14,16 +14,28 @@ qt_generate_moc(
   ${CMAKE_CURRENT_SOURCE_DIR}/install_app_image_dialog.hpp
   ${CMAKE_CURRENT_BINARY_DIR}/moc_install_app_image_dialog.cpp
 )
+qt_generate_moc(
+  ${CMAKE_CURRENT_SOURCE_DIR}/github_release_selector.hpp
+  ${CMAKE_CURRENT_BINARY_DIR}/moc_github_release_selector.cpp
+)
+qt_generate_moc(
+  ${CMAKE_CURRENT_SOURCE_DIR}/appimage_asset_selector.hpp
+  ${CMAKE_CURRENT_BINARY_DIR}/moc_appimage_asset_selector.cpp
+)
 add_executable(appimage-manager-gui
   main.cpp
   main_window.cpp
   app_settings_dialog.cpp
   watch_directories_dialog.cpp
   install_app_image_dialog.cpp
+  github_release_selector.cpp
+  appimage_asset_selector.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/moc_main_window.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/moc_app_settings_dialog.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/moc_watch_directories_dialog.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/moc_install_app_image_dialog.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/moc_github_release_selector.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/moc_appimage_asset_selector.cpp
 )
 target_include_directories(appimage-manager-gui PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
