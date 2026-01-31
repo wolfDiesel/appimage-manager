@@ -6,12 +6,6 @@ on:
     tags: ['v*.*.*']
   pull_request:
     branches: [main, master]
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Release version (e.g. 1.0.2)'
-        required: false
-        type: string
 
 jobs:
   test:
@@ -42,7 +36,7 @@ jobs:
 
   build:
     needs: test
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -76,8 +70,7 @@ jobs:
       - name: Build AppImage
         run: cmake --build build --target appimage -j4
 
-      - name: Upload artifacts (tag)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: appimage-manager-${{ github.ref_name }}
@@ -87,19 +80,9 @@ jobs:
             build/appimage-manager.AppImage
           retention-days: 30
 
-      - name: Upload artifacts (release)
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-build
-          path: |
-            build/daemon/appimage-manager-daemon
-            build/gui/appimage-manager-gui
-            build/appimage-manager.AppImage
-
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '')
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     environment: release
     permissions:
@@ -107,34 +90,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set release tag
-        id: tag
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "name=v${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Download artifacts (tag)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           name: appimage-manager-${{ github.ref_name }}
           path: artifacts
 
-      - name: Download artifacts (manual)
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/download-artifact@v4
-        with:
-          name: release-build
-          path: artifacts
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag.outputs.name }}
-          name: ${{ steps.tag.outputs.name }}
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
           files: |
             artifacts/build/daemon/appimage-manager-daemon
             artifacts/build/gui/appimage-manager-gui
