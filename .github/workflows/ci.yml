@@ -72,6 +72,9 @@ jobs:
 
       - name: Build
         run: cmake --build build -j4
+      
+      - name: Build AppImage
+        run: cmake --build build --target appimage -j4
 
       - name: Upload artifacts (tag)
         if: startsWith(github.ref, 'refs/tags/v')
