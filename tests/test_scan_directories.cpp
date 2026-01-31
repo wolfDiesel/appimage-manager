@@ -52,10 +52,33 @@ int test_scan_directories_ignores_part_and_crdownload() {
   return 0;
 }
 
+int test_scan_directories_skips_self_path() {
+  fs::path tmp = fs::temp_directory_path() / "appimage-manager-test-scan-self";
+  fs::create_directories(tmp);
+  std::string self_path = (tmp / "self.AppImage").string();
+  std::ofstream(self_path).put('x');
+  std::string other_path = (tmp / "other.AppImage").string();
+  std::ofstream(other_path).put('x');
+  appimage_manager::infrastructure::JsonRegistryRepository registry(tmp.string());
+  appimage_manager::application::ScanDirectories scan(registry);
+  appimage_manager::domain::Config config;
+  config.watch_directories.push_back(tmp.string());
+  auto records = scan.execute(config, nullptr, self_path);
+  assert(records.size() == 1u);
+  assert(records[0].path == other_path);
+  assert(records[0].name == "other");
+  auto all = registry.all();
+  assert(all.size() == 1u);
+  assert(all[0].path == other_path);
+  fs::remove_all(tmp);
+  return 0;
+}
+
 using test_fn = int (*)();
 static const test_fn tests[] = {
   test_scan_directories_finds_appimage_and_saves_to_registry,
   test_scan_directories_ignores_part_and_crdownload,
+  test_scan_directories_skips_self_path,
 };
 static constexpr std::size_t num_tests = sizeof(tests) / sizeof(tests[0]);
 

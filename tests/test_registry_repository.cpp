@@ -71,6 +71,23 @@ int test_registry_remove_by_path() {
   return 0;
 }
 
+int test_registry_remove_by_id() {
+  fs::path tmp = fs::temp_directory_path() / "appimage-manager-test-registry-remove-id";
+  fs::create_directories(tmp);
+  appimage_manager::infrastructure::JsonRegistryRepository repo(tmp.string());
+  appimage_manager::domain::AppImageRecord r;
+  r.id = "id-to-remove";
+  r.path = "/opt/Some.AppImage";
+  r.name = "Some";
+  repo.save(r);
+  repo.remove("id-to-remove");
+  assert(repo.all().empty());
+  assert(!repo.by_path(r.path));
+  assert(!repo.by_id(r.id));
+  fs::remove_all(tmp);
+  return 0;
+}
+
 int test_registry_empty_dir_returns_empty() {
   fs::path tmp = fs::temp_directory_path() / "appimage-manager-test-registry-empty";
   fs::create_directories(tmp);
@@ -97,6 +114,7 @@ static const test_fn tests[] = {
   test_registry_round_trip,
   test_registry_update_existing_by_path,
   test_registry_remove_by_path,
+  test_registry_remove_by_id,
   test_registry_empty_dir_returns_empty,
   test_registry_invalid_json_returns_empty,
 };

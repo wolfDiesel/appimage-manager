@@ -52,11 +52,32 @@ int test_launch_settings_invalid_json_returns_empty() {
   return 0;
 }
 
+int test_launch_settings_remove() {
+  fs::path tmp = fs::temp_directory_path() / "appimage-manager-test-launch-remove";
+  fs::create_directories(tmp);
+  appimage_manager::infrastructure::JsonLaunchSettingsRepository repo(tmp.string());
+  appimage_manager::domain::LaunchSettings ls;
+  ls.args = "--test";
+  repo.save("app-a", ls);
+  repo.save("app-b", ls);
+  assert(repo.load_all().size() == 2u);
+  repo.remove("app-a");
+  assert(repo.load_all().size() == 1u);
+  assert(!repo.load("app-a"));
+  assert(repo.load("app-b"));
+  repo.remove("app-b");
+  assert(repo.load_all().empty());
+  assert(!repo.load("app-b"));
+  fs::remove_all(tmp);
+  return 0;
+}
+
 using test_fn = int (*)();
 static const test_fn tests[] = {
   test_launch_settings_round_trip,
   test_launch_settings_missing_returns_nullopt,
   test_launch_settings_invalid_json_returns_empty,
+  test_launch_settings_remove,
 };
 static constexpr std::size_t num_tests = sizeof(tests) / sizeof(tests[0]);
 
