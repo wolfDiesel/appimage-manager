@@ -6,6 +6,12 @@ on:
     tags: ['v*.*.*']
   pull_request:
     branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.0.2)'
+        required: false
+        type: string
 
 jobs:
   test:
@@ -36,7 +42,7 @@ jobs:
 
   build:
     needs: test
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -50,19 +56,66 @@ jobs:
             qt6-base-dev \
             nlohmann-json3-dev
 
+      - name: Install appimagetool
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          wget -q -O /tmp/appimagetool.AppImage \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /tmp/appimagetool.AppImage
+          sudo mv /tmp/appimagetool.AppImage /usr/local/bin/appimagetool
+
       - name: Configure
         run: |
           cmake -B build -S . \
             -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTS=ON
+            -DBUILD_TESTS=ON \
+            -DBUILD_APPIMAGE=${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Build
         run: cmake --build build -j4
 
-      - name: Upload artifacts
+      - name: Upload artifacts (tag)
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
           name: appimage-manager-${{ github.ref_name }}
           path: |
             build/daemon/appimage-manager-daemon
             build/gui/appimage-manager-gui
+
+      - name: Upload artifacts (release)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build
+          path: |
+            build/daemon/appimage-manager-daemon
+            build/gui/appimage-manager-gui
+            build/appimage-manager.AppImage
+
+  release:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.version != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-build
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: v${{ github.event.inputs.version }}
+          files: |
+            build/daemon/appimage-manager-daemon
+            build/gui/appimage-manager-gui
+            build/appimage-manager.AppImage
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
