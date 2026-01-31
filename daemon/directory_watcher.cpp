@@ -1,4 +1,5 @@
 #include "directory_watcher.hpp"
+#include "desktop_notification.hpp"
 #include <domain/entities/config.hpp>
 #include <domain/entities/launch_settings.hpp>
 #include <filesystem>
@@ -75,6 +76,8 @@ void DirectoryWatcher::scan_directory(const std::string& dir_path) {
     if (loaded)
       settings = *loaded;
     application::generate_desktop(record, settings, applications_dir_);
+    fs::path p(record.path);
+    notify_appimage_processed(p.filename().string(), p.parent_path().string());
   };
   scan_.execute(single, on_added, self_path_);
 }
