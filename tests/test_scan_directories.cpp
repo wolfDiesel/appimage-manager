@@ -52,6 +52,26 @@ int test_scan_directories_ignores_part_and_crdownload() {
   return 0;
 }
 
+int test_scan_directories_sets_executable_on_new_file() {
+  fs::path tmp = fs::temp_directory_path() / "appimage-manager-test-scan-exec";
+  fs::create_directories(tmp);
+  std::string app_path = (tmp / "ExecTool.AppImage").string();
+  std::ofstream(app_path).put('x');
+  fs::permissions(app_path, fs::perms::owner_exec, fs::perm_options::remove);
+  auto perms_before = fs::status(app_path).permissions();
+  assert((perms_before & fs::perms::owner_exec) == fs::perms::none);
+  appimage_manager::infrastructure::JsonRegistryRepository registry(tmp.string());
+  appimage_manager::application::ScanDirectories scan(registry);
+  appimage_manager::domain::Config config;
+  config.watch_directories.push_back(tmp.string());
+  auto records = scan.execute(config, nullptr);
+  assert(records.size() == 1u);
+  auto perms_after = fs::status(app_path).permissions();
+  assert((perms_after & fs::perms::owner_exec) != fs::perms::none);
+  fs::remove_all(tmp);
+  return 0;
+}
+
 int test_scan_directories_skips_self_path() {
   fs::path tmp = fs::temp_directory_path() / "appimage-manager-test-scan-self";
   fs::create_directories(tmp);
@@ -78,6 +98,7 @@ using test_fn = int (*)();
 static const test_fn tests[] = {
   test_scan_directories_finds_appimage_and_saves_to_registry,
   test_scan_directories_ignores_part_and_crdownload,
+  test_scan_directories_sets_executable_on_new_file,
   test_scan_directories_skips_self_path,
 };
 static constexpr std::size_t num_tests = sizeof(tests) / sizeof(tests[0]);

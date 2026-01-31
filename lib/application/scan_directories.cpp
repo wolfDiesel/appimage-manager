@@ -74,6 +74,8 @@ std::vector<domain::AppImageRecord> ScanDirectories::execute(const domain::Confi
       record.path = path;
       record.name = p.stem().string();
       record.install_type = domain::InstallType::Downloaded;
+      std::error_code perm_ec;
+      fs::permissions(p, fs::perms::owner_exec, fs::perm_options::add, perm_ec);
       registry_->save(record);
       result.push_back(record);
       if (on_added)
