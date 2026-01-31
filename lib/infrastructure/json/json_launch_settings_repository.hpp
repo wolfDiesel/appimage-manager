@@ -12,6 +12,7 @@ public:
   std::optional<domain::LaunchSettings> load(const std::string& app_id) const override;
   void save(const std::string& app_id, const domain::LaunchSettings& settings) override;
   std::unordered_map<std::string, domain::LaunchSettings> load_all() const override;
+  void remove(const std::string& app_id) override;
 
 private:
   std::string config_dir_;

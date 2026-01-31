@@ -35,6 +35,7 @@ public Q_SLOTS:
   QVariantMap GetLaunchSettings(const QString& app_id) const;
   void SetLaunchSettings(const QString& app_id, const QString& args,
                          const QStringList& env, const QString& sandbox);
+  bool RemoveAppImage(const QString& app_id);
 
 private:
   domain::RegistryRepository* registry_;

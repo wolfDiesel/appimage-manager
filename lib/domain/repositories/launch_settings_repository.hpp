@@ -13,6 +13,7 @@ public:
   virtual std::optional<LaunchSettings> load(const std::string& app_id) const = 0;
   virtual void save(const std::string& app_id, const LaunchSettings& settings) = 0;
   virtual std::unordered_map<std::string, LaunchSettings> load_all() const = 0;
+  virtual void remove(const std::string& app_id) = 0;
 };
 
 }

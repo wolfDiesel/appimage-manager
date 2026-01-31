@@ -14,7 +14,8 @@ public:
 
   explicit ScanDirectories(domain::RegistryRepository& registry);
   std::vector<domain::AppImageRecord> execute(const domain::Config& config,
-                                              OnAddedCallback on_added = nullptr);
+                                              OnAddedCallback on_added = nullptr,
+                                              const std::string& self_path = "");
 
 private:
   domain::RegistryRepository* registry_;

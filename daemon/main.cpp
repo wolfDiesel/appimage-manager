@@ -75,6 +75,10 @@ int main(int argc, char* argv[]) {
       std::cerr << " (skipped)";
     std::cerr << "\n";
   }
+  std::string self_path;
+  if (const char* appimage = std::getenv("APPIMAGE"))
+    self_path = appimage;
+
   appimage_manager::infrastructure::JsonRegistryRepository registry(config_dir);
   appimage_manager::infrastructure::JsonLaunchSettingsRepository launch_settings_repository(config_dir);
   appimage_manager::application::ScanDirectories scan(registry);
@@ -84,7 +88,7 @@ int main(int argc, char* argv[]) {
     appimage_manager::domain::LaunchSettings ls = settings.value_or(default_settings);
     appimage_manager::application::generate_desktop(record, ls, applications_dir);
   };
-  auto records = scan.execute(config, on_added);
+  auto records = scan.execute(config, on_added, self_path);
 
   for (const auto& dir : config.watch_directories) {
     fs::path base(dir);
@@ -101,7 +105,7 @@ int main(int argc, char* argv[]) {
   }
 
   appimage_manager::daemon::DirectoryWatcher watcher(
-    registry, launch_settings_repository, applications_dir, &app);
+    registry, launch_settings_repository, applications_dir, self_path, &app);
   watcher.set_config(config);
 
   QObject* dbus_server = new QObject(&app);

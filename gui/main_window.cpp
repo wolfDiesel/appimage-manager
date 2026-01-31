@@ -56,9 +56,11 @@ void MainWindow::setup_ui() {
   app_settings_btn_ = new QPushButton(tr("App settings..."), this);
   watch_dirs_btn_ = new QPushButton(tr("Watch directories..."), this);
   install_btn_ = new QPushButton(tr("Install AppImage..."), this);
+  remove_btn_ = new QPushButton(tr("Remove..."), this);
   daemon_layout->addWidget(app_settings_btn_);
   daemon_layout->addWidget(watch_dirs_btn_);
   daemon_layout->addWidget(install_btn_);
+  daemon_layout->addWidget(remove_btn_);
   daemon_layout->addStretch();
   layout->addWidget(daemon_box);
 
@@ -83,6 +85,7 @@ void MainWindow::setup_ui() {
   connect(app_settings_btn_, &QPushButton::clicked, this, &MainWindow::open_app_settings);
   connect(watch_dirs_btn_, &QPushButton::clicked, this, &MainWindow::open_watch_directories);
   connect(install_btn_, &QPushButton::clicked, this, &MainWindow::open_install_dialog);
+  connect(remove_btn_, &QPushButton::clicked, this, &MainWindow::remove_app);
 }
 
 bool MainWindow::is_daemon_running() const {
@@ -253,6 +256,37 @@ void MainWindow::open_install_dialog() {
   dlg.exec();
   if (is_daemon_running())
     refresh_list();
+}
+
+void MainWindow::remove_app() {
+  QString id = selected_app_id();
+  if (id.isEmpty()) {
+    QMessageBox::information(this, tr("Remove"), tr("Select an application first."));
+    return;
+  }
+  int row = table_->row(table_->selectedItems().first());
+  QString name = table_->item(row, 0) ? table_->item(row, 0)->text() : id;
+  
+  QMessageBox::StandardButton reply = QMessageBox::question(this, tr("Remove AppImage"),
+    tr("Remove \"%1\"?\n\nThis will delete the AppImage file, desktop entry, and all settings.").arg(name),
+    QMessageBox::Yes | QMessageBox::No);
+  
+  if (reply != QMessageBox::Yes)
+    return;
+  
+  if (!dbus_ || !dbus_->isValid()) {
+    QMessageBox::warning(this, tr("Error"), tr("Daemon not available."));
+    return;
+  }
+  
+  QDBusReply<bool> dbus_reply = dbus_->call(QStringLiteral("RemoveAppImage"), id);
+  if (!dbus_reply.isValid() || !dbus_reply.value()) {
+    QMessageBox::warning(this, tr("Error"), tr("Failed to remove AppImage."));
+    return;
+  }
+  
+  QMessageBox::information(this, tr("Done"), tr("AppImage removed successfully."));
+  refresh_list();
 }
 
 }

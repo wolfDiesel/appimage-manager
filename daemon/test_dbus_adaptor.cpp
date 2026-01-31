@@ -26,6 +26,7 @@ public:
   std::optional<appimage_manager::domain::AppImageRecord> by_id(const std::string&) const override { return std::nullopt; }
   void save(const appimage_manager::domain::AppImageRecord&) override {}
   void remove_by_path(const std::string&) override {}
+  void remove(const std::string&) override {}
 };
 
 class MockConfigRepository : public appimage_manager::domain::ConfigRepository {
@@ -39,6 +40,7 @@ public:
   std::optional<appimage_manager::domain::LaunchSettings> load(const std::string&) const override { return std::nullopt; }
   void save(const std::string&, const appimage_manager::domain::LaunchSettings&) override {}
   std::unordered_map<std::string, appimage_manager::domain::LaunchSettings> load_all() const override { return {}; }
+  void remove(const std::string&) override {}
 };
 
 int test_getallrecords_returns_maps_with_required_keys() {

@@ -14,6 +14,7 @@ public:
   virtual std::optional<AppImageRecord> by_id(const std::string& id) const = 0;
   virtual void save(const AppImageRecord& record) = 0;
   virtual void remove_by_path(const std::string& path) = 0;
+  virtual void remove(const std::string& id) = 0;
 };
 
 }

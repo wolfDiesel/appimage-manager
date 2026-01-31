@@ -31,11 +31,13 @@ bool is_appimage_path(const std::string& path) {
 DirectoryWatcher::DirectoryWatcher(domain::RegistryRepository& registry,
                                  domain::LaunchSettingsRepository& launch_settings_repository,
                                  const std::string& applications_dir,
+                                 const std::string& self_path,
                                  QObject* parent)
   : QObject(parent)
   , registry_(&registry)
   , launch_settings_repository_(&launch_settings_repository)
   , applications_dir_(applications_dir)
+  , self_path_(self_path)
   , scan_(registry) {
   connect(&watcher_, &QFileSystemWatcher::directoryChanged, this, &DirectoryWatcher::on_directory_changed);
 }
@@ -74,7 +76,7 @@ void DirectoryWatcher::scan_directory(const std::string& dir_path) {
       settings = *loaded;
     application::generate_desktop(record, settings, applications_dir_);
   };
-  scan_.execute(single, on_added);
+  scan_.execute(single, on_added, self_path_);
 }
 
 void DirectoryWatcher::remove_stale_records_for_directory(const std::string& dir_path) {

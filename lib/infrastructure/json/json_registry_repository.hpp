@@ -14,6 +14,7 @@ public:
   std::optional<domain::AppImageRecord> by_id(const std::string& id) const override;
   void save(const domain::AppImageRecord& record) override;
   void remove_by_path(const std::string& path) override;
+  void remove(const std::string& id) override;
 
 private:
   std::string config_dir_;

@@ -28,6 +28,7 @@ private Q_SLOTS:
   void open_app_settings();
   void open_watch_directories();
   void open_install_dialog();
+  void remove_app();
 
 private:
   void setup_ui();
@@ -47,6 +48,7 @@ private:
   QPushButton* app_settings_btn_{nullptr};
   QPushButton* watch_dirs_btn_{nullptr};
   QPushButton* install_btn_{nullptr};
+  QPushButton* remove_btn_{nullptr};
   QDBusInterface* dbus_{nullptr};
   QTimer* status_timer_{nullptr};
 };

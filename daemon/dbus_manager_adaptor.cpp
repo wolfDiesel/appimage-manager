@@ -5,6 +5,7 @@
 #include <application/generate_desktop.hpp>
 #include <QDBusConnection>
 #include <QVariantMap>
+#include <filesystem>
 
 namespace appimage_manager::daemon {
 
@@ -117,6 +118,24 @@ void DBusManagerAdaptor::SetLaunchSettings(const QString& app_id, const QString&
   auto record = registry_->by_id(app_id.toStdString());
   if (record)
     application::generate_desktop(*record, settings, applications_dir_);
+}
+
+bool DBusManagerAdaptor::RemoveAppImage(const QString& app_id) {
+  std::string id = app_id.toStdString();
+  auto record = registry_->by_id(id);
+  if (!record)
+    return false;
+  
+  std::error_code ec;
+  std::filesystem::remove(record->path, ec);
+  application::remove_desktop(id, applications_dir_);
+  launch_settings_repository_->remove(id);
+  registry_->remove(id);
+  
+  if (watcher_)
+    watcher_->trigger_rescan();
+  
+  return true;
 }
 
 }

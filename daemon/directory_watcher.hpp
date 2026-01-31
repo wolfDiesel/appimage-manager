@@ -18,6 +18,7 @@ public:
   DirectoryWatcher(domain::RegistryRepository& registry,
                   domain::LaunchSettingsRepository& launch_settings_repository,
                   const std::string& applications_dir,
+                  const std::string& self_path = "",
                   QObject* parent = nullptr);
 
   void set_config(const domain::Config& config);
@@ -36,6 +37,7 @@ private:
   domain::RegistryRepository* registry_;
   domain::LaunchSettingsRepository* launch_settings_repository_;
   std::string applications_dir_;
+  std::string self_path_;
   domain::Config config_;
   QFileSystemWatcher watcher_;
   application::ScanDirectories scan_;

@@ -148,4 +148,13 @@ void JsonRegistryRepository::remove_by_path(const std::string& path) {
   persist(records);
 }
 
+void JsonRegistryRepository::remove(const std::string& id) {
+  auto records = load();
+  records.erase(
+    std::remove_if(records.begin(), records.end(),
+      [&id](const domain::AppImageRecord& r) { return r.id == id; }),
+    records.end());
+  persist(records);
+}
+
 }

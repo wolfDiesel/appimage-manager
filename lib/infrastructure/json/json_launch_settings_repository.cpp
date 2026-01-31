@@ -101,4 +101,22 @@ void JsonLaunchSettingsRepository::save(const std::string& app_id, const domain:
     f << j.dump(2);
 }
 
+void JsonLaunchSettingsRepository::remove(const std::string& app_id) {
+  auto all = load_all();
+  all.erase(app_id);
+  std::string path = launch_settings_path();
+  fs::path dir(path);
+  dir.remove_filename();
+  if (!dir.empty())
+    fs::create_directories(dir);
+  nlohmann::json j;
+  nlohmann::json settings_obj;
+  for (const auto& [id, ls] : all)
+    settings_obj[id] = launch_settings_to_json(ls);
+  j["settings"] = settings_obj;
+  std::ofstream f(path);
+  if (f)
+    f << j.dump(2);
+}
+
 }
