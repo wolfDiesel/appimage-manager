@@ -99,9 +99,9 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           files: |
-            artifacts/build/daemon/appimage-manager-daemon
-            artifacts/build/gui/appimage-manager-gui
-            artifacts/build/appimage-manager.AppImage
+            artifacts/daemon/appimage-manager-daemon
+            artifacts/gui/appimage-manager-gui
+            artifacts/appimage-manager.AppImage
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
