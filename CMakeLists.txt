@@ -22,7 +22,7 @@ if(BUILD_TESTS)
 endif()
 
 add_custom_target(appimage
-  COMMAND ${CMAKE_COMMAND} -E chmod +x ${CMAKE_SOURCE_DIR}/packaging/appimage/build_appimage.sh
+  COMMAND chmod +x ${CMAKE_SOURCE_DIR}/packaging/appimage/build_appimage.sh
   COMMAND ${CMAKE_SOURCE_DIR}/packaging/appimage/build_appimage.sh ${CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR}/appimage-manager.AppImage
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   COMMENT "Building AppImage"
