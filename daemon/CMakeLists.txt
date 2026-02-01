@@ -8,6 +8,7 @@ qt_generate_moc(
 )
 add_executable(appimage-manager-daemon
   main.cpp
+  appimage_icon.cpp
   desktop_notification.cpp
   directory_watcher.cpp
   dbus_manager_adaptor.cpp
@@ -24,9 +25,19 @@ target_link_libraries(appimage-manager-daemon PRIVATE
   Qt6::DBus
 )
 
+add_executable(list-appimage-contents list_appimage_contents.cpp)
+target_include_directories(list-appimage-contents PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_BINARY_DIR}
+)
+target_link_libraries(list-appimage-contents PRIVATE
+  appimage-manager-core
+  Qt6::Core
+)
+
 configure_file(appimage-manager.service.in ${CMAKE_CURRENT_BINARY_DIR}/appimage-manager.service @ONLY)
 
-install(TARGETS appimage-manager-daemon RUNTIME DESTINATION bin)
+install(TARGETS appimage-manager-daemon list-appimage-contents RUNTIME DESTINATION bin)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/appimage-manager.service
   DESTINATION share/systemd/user
   COMPONENT systemd-user)
@@ -35,6 +46,7 @@ install(FILES config.json.example DESTINATION share/appimage-manager COMPONENT c
 if(BUILD_TESTS)
   add_executable(appimage-manager-daemon-adaptor-test
     test_dbus_adaptor.cpp
+    appimage_icon.cpp
     dbus_manager_adaptor.cpp
     desktop_notification.cpp
     directory_watcher.cpp

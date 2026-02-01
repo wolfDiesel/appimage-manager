@@ -8,6 +8,7 @@
 #include <infrastructure/json/json_config_repository.hpp>
 #include <infrastructure/json/json_registry_repository.hpp>
 #include <infrastructure/json/json_launch_settings_repository.hpp>
+#include <appimage_icon.hpp>
 #include <directory_watcher.hpp>
 #include <dbus_manager_adaptor.hpp>
 #include <QCoreApplication>
@@ -83,12 +84,19 @@ int main(int argc, char* argv[]) {
   appimage_manager::infrastructure::JsonLaunchSettingsRepository launch_settings_repository(config_dir);
   appimage_manager::application::ScanDirectories scan(registry);
   appimage_manager::domain::LaunchSettings default_settings;
-  auto on_added = [&](const appimage_manager::domain::AppImageRecord& record) {
+  std::string icons_dir = (fs::path(applications_dir).parent_path() / "appimage-manager" / "icons").string();
+  auto ensure_desktop_with_icon = [&](const appimage_manager::domain::AppImageRecord& record) {
     auto settings = launch_settings_repository.load(record.id);
     appimage_manager::domain::LaunchSettings ls = settings.value_or(default_settings);
-    appimage_manager::application::generate_desktop(record, ls, applications_dir);
+    std::string icon_path = appimage_manager::application::icon_file_path(record.id, icons_dir);
+    if (!fs::is_regular_file(icon_path))
+      icon_path = appimage_manager::daemon::extract_icon_from_appimage(record.path, icons_dir, record.id);
+    appimage_manager::application::generate_desktop(record, ls, applications_dir, icon_path);
   };
-  auto records = scan.execute(config, on_added, self_path);
+  auto on_added = [&](const appimage_manager::domain::AppImageRecord& record) {
+    ensure_desktop_with_icon(record);
+  };
+  auto records = scan.execute(config, on_added, self_path, ensure_desktop_with_icon);
 
   for (const auto& dir : config.watch_directories) {
     fs::path base(dir);
@@ -119,8 +127,10 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
   if (!session.registerService(QStringLiteral("org.appimage.Manager1"))) {
+    QString err = session.lastError().message();
     std::cerr << "appimage-manager-daemon: failed to register D-Bus service: "
-              << session.lastError().message().toStdString() << "\n";
+              << (err.isEmpty() ? "service name already in use (stop other instance: systemctl --user stop appimage-manager)" : err.toStdString())
+              << "\n";
     return EXIT_FAILURE;
   }
 

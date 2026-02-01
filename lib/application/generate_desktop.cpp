@@ -32,6 +32,12 @@ std::string sanitize_id_for_filename(const std::string& id) {
   return out.empty() ? "app" : out;
 }
 
+std::string id_to_eight_digits(const std::string& id) {
+  if (id.size() >= 8u)
+    return id.substr(id.size() - 8);
+  return std::string(8u - id.size(), '0') + id;
+}
+
 std::string build_exec_line(const domain::AppImageRecord& record,
                             const domain::LaunchSettings& settings) {
   std::string path_esc = escape_desktop_string(record.path);
@@ -51,18 +57,23 @@ std::string build_exec_line(const domain::AppImageRecord& record,
 }
 
 std::string desktop_file_path(const std::string& record_id,
+                              const std::string& record_name,
                               const std::string& applications_dir) {
-  std::string base = sanitize_id_for_filename(record_id);
-  return (fs::path(applications_dir) / ("appimage-manager-" + base + ".desktop")).string();
+  std::string name_part = sanitize_id_for_filename(record_name);
+  if (name_part.empty())
+    name_part = "app";
+  std::string digits = id_to_eight_digits(record_id);
+  return (fs::path(applications_dir) / ("appimagemanager-" + name_part + "-" + digits + ".desktop")).string();
 }
 
 void generate_desktop(const domain::AppImageRecord& record,
                       const domain::LaunchSettings& settings,
-                      const std::string& applications_dir) {
+                      const std::string& applications_dir,
+                      const std::string& icon_path) {
   fs::path dir(applications_dir);
   if (!dir.empty())
     fs::create_directories(dir);
-  std::string path = desktop_file_path(record.id, applications_dir);
+  std::string path = desktop_file_path(record.id, record.name, applications_dir);
   std::ofstream f(path);
   if (!f)
     return;
@@ -70,6 +81,8 @@ void generate_desktop(const domain::AppImageRecord& record,
   f << "Type=Application\n";
   f << "Name=" << escape_desktop_string(record.name) << "\n";
   f << "Exec=" << build_exec_line(record, settings) << "\n";
+  if (!icon_path.empty())
+    f << "Icon=" << escape_desktop_string(icon_path) << "\n";
   for (const auto& e : settings.env)
     f << "Env=" << escape_desktop_string(e) << "\n";
   f << "Terminal=false\n";
@@ -77,10 +90,26 @@ void generate_desktop(const domain::AppImageRecord& record,
 }
 
 void remove_desktop(const std::string& record_id,
-                   const std::string& applications_dir) {
-  std::string path = desktop_file_path(record_id, applications_dir);
+                    const std::string& record_name,
+                    const std::string& applications_dir) {
+  std::string path = desktop_file_path(record_id, record_name, applications_dir);
   std::error_code ec;
   fs::remove(path, ec);
+}
+
+std::string icon_file_path(const std::string& record_id,
+                            const std::string& icons_dir,
+                            const std::string& extension) {
+  std::string base = sanitize_id_for_filename(record_id);
+  std::string ext = extension.empty() || extension[0] != '.' ? "." + extension : extension;
+  return (fs::path(icons_dir) / (base + ext)).string();
+}
+
+void remove_icon(const std::string& record_id,
+                 const std::string& icons_dir) {
+  std::error_code ec;
+  fs::remove(icon_file_path(record_id, icons_dir, ".png"), ec);
+  fs::remove(icon_file_path(record_id, icons_dir, ".svg"), ec);
 }
 
 }

@@ -116,8 +116,13 @@ void DBusManagerAdaptor::SetLaunchSettings(const QString& app_id, const QString&
   settings.sandbox = string_to_sandbox(sandbox);
   launch_settings_repository_->save(app_id.toStdString(), settings);
   auto record = registry_->by_id(app_id.toStdString());
-  if (record)
-    application::generate_desktop(*record, settings, applications_dir_);
+  if (record) {
+    std::string icons_dir = (std::filesystem::path(applications_dir_).parent_path() / "appimage-manager" / "icons").string();
+    std::string icon_path = application::icon_file_path(record->id, icons_dir);
+    if (!std::filesystem::is_regular_file(icon_path))
+      icon_path.clear();
+    application::generate_desktop(*record, settings, applications_dir_, icon_path);
+  }
 }
 
 bool DBusManagerAdaptor::RemoveAppImage(const QString& app_id) {
@@ -128,7 +133,7 @@ bool DBusManagerAdaptor::RemoveAppImage(const QString& app_id) {
   
   std::error_code ec;
   std::filesystem::remove(record->path, ec);
-  application::remove_desktop(id, applications_dir_);
+  application::remove_desktop(id, record->name, applications_dir_);
   launch_settings_repository_->remove(id);
   registry_->remove(id);
   

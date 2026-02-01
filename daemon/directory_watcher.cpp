@@ -1,4 +1,5 @@
 #include "directory_watcher.hpp"
+#include "appimage_icon.hpp"
 #include "desktop_notification.hpp"
 #include <domain/entities/config.hpp>
 #include <domain/entities/launch_settings.hpp>
@@ -70,16 +71,23 @@ void DirectoryWatcher::scan_directory(const std::string& dir_path) {
   domain::Config single;
   single.watch_directories.push_back(dir_path);
   domain::LaunchSettings default_settings;
-  auto on_added = [this, &default_settings](const domain::AppImageRecord& record) {
+  std::string icons_dir = (fs::path(applications_dir_).parent_path() / "appimage-manager" / "icons").string();
+  auto ensure_desktop_with_icon = [this, &default_settings, &icons_dir](const domain::AppImageRecord& record) {
     domain::LaunchSettings settings = default_settings;
     auto loaded = launch_settings_repository_->load(record.id);
     if (loaded)
       settings = *loaded;
-    application::generate_desktop(record, settings, applications_dir_);
+    std::string icon_path = application::icon_file_path(record.id, icons_dir);
+    if (!fs::is_regular_file(icon_path))
+      icon_path = extract_icon_from_appimage(record.path, icons_dir, record.id);
+    application::generate_desktop(record, settings, applications_dir_, icon_path);
+  };
+  auto on_added = [this, &ensure_desktop_with_icon](const domain::AppImageRecord& record) {
+    ensure_desktop_with_icon(record);
     fs::path p(record.path);
     notify_appimage_processed(p.filename().string(), p.parent_path().string());
   };
-  scan_.execute(single, on_added, self_path_);
+  scan_.execute(single, on_added, self_path_, ensure_desktop_with_icon);
 }
 
 void DirectoryWatcher::remove_stale_records_for_directory(const std::string& dir_path) {
@@ -100,7 +108,9 @@ void DirectoryWatcher::remove_stale_records_for_directory(const std::string& dir
     bool still_exists = std::find(current_paths.begin(), current_paths.end(), record.path) != current_paths.end();
     if (!still_exists) {
       registry_->remove_by_path(record.path);
-      application::remove_desktop(record.id, applications_dir_);
+      std::string icons_dir = (fs::path(applications_dir_).parent_path() / "appimage-manager" / "icons").string();
+      application::remove_desktop(record.id, record.name, applications_dir_);
+      application::remove_icon(record.id, icons_dir);
     }
   }
 }

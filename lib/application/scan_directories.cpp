@@ -46,7 +46,8 @@ ScanDirectories::ScanDirectories(domain::RegistryRepository& registry)
 
 std::vector<domain::AppImageRecord> ScanDirectories::execute(const domain::Config& config,
                                                              OnAddedCallback on_added,
-                                                             const std::string& self_path) {
+                                                             const std::string& self_path,
+                                                             OnEnsureDesktopCallback on_ensure_desktop) {
   std::vector<domain::AppImageRecord> result;
   for (const auto& dir : config.watch_directories) {
     fs::path base(dir);
@@ -67,6 +68,8 @@ std::vector<domain::AppImageRecord> ScanDirectories::execute(const domain::Confi
       auto existing = registry_->by_path(path);
       if (existing) {
         result.push_back(*existing);
+        if (on_ensure_desktop)
+          on_ensure_desktop(*existing);
         continue;
       }
       domain::AppImageRecord record;
