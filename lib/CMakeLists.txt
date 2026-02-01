@@ -10,6 +10,8 @@ add_library(appimage-manager-core STATIC
   domain/repositories/launch_settings_repository.hpp
   application/scan_directories.hpp
   application/scan_directories.cpp
+  application/extract_icon.hpp
+  application/extract_icon.cpp
   application/generate_desktop.hpp
   application/generate_desktop.cpp
   infrastructure/json/json_config_repository.hpp

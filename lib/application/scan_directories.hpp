@@ -11,11 +11,13 @@ namespace appimage_manager::application {
 class ScanDirectories {
 public:
   using OnAddedCallback = std::function<void(const domain::AppImageRecord&)>;
+  using OnEnsureDesktopCallback = std::function<void(const domain::AppImageRecord&)>;
 
   explicit ScanDirectories(domain::RegistryRepository& registry);
   std::vector<domain::AppImageRecord> execute(const domain::Config& config,
                                               OnAddedCallback on_added = nullptr,
-                                              const std::string& self_path = "");
+                                              const std::string& self_path = "",
+                                              OnEnsureDesktopCallback on_ensure_desktop = nullptr);
 
 private:
   domain::RegistryRepository* registry_;
