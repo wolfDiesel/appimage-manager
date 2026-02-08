@@ -27,12 +27,13 @@ private Q_SLOTS:
   void fetch_github_search_finished();
   void fetch_github_releases_for_search_finished();
   void on_github_search_double_clicked(QListWidgetItem* item);
+  void try_mark_github_download();
 
 private:
   void load_watch_directories();
   void set_busy(bool busy);
   QString github_releases_url(const QString& spec) const;
-  void start_download(const QUrl& url, const QString& suggested_name);
+  void start_download(const QUrl& url, const QString& suggested_name, const QUrl& sha256_url = QUrl());
   QString suggested_filename(const QUrl& url) const;
 
   bool eventFilter(QObject* obj, QEvent* e) override;
@@ -56,6 +57,9 @@ private:
   QNetworkReply* active_reply_{nullptr};
   QFile* output_file_{nullptr};
   QString target_path_;
+  bool installed_from_github_{false};
+  int github_mark_attempts_{0};
+  QUrl expected_sha256_url_;
 };
 
 }
