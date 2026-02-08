@@ -34,6 +34,12 @@ domain::SandboxMechanism string_to_sandbox(const QString& s) {
   return domain::SandboxMechanism::None;
 }
 
+domain::InstallType string_to_install_type(const QString& s) {
+  if (s == QLatin1String("GitHub")) return domain::InstallType::GitHub;
+  if (s == QLatin1String("Direct")) return domain::InstallType::Direct;
+  return domain::InstallType::Downloaded;
+}
+
 }
 
 DBusManagerAdaptor::DBusManagerAdaptor(domain::RegistryRepository& registry,
@@ -140,6 +146,34 @@ bool DBusManagerAdaptor::RemoveAppImage(const QString& app_id) {
   if (watcher_)
     watcher_->trigger_rescan();
   
+  return true;
+}
+
+bool DBusManagerAdaptor::SetRecordName(const QString& app_id, const QString& name) {
+  std::string id = app_id.toStdString();
+  std::string new_name = name.trimmed().toStdString();
+  if (new_name.empty()) return false;
+  auto record = registry_->by_id(id);
+  if (!record) return false;
+  std::string old_name = record->name;
+  record->name = new_name;
+  registry_->save(*record);
+  application::remove_desktop(id, old_name, applications_dir_);
+  auto settings = launch_settings_repository_->load(id);
+  domain::LaunchSettings ls = settings.value_or(domain::LaunchSettings{});
+  std::string icons_dir = (std::filesystem::path(applications_dir_).parent_path() / "appimage-manager" / "icons").string();
+  std::string icon_path = application::icon_file_path(record->id, icons_dir);
+  if (!std::filesystem::is_regular_file(icon_path))
+    icon_path.clear();
+  application::generate_desktop(*record, ls, applications_dir_, icon_path);
+  return true;
+}
+
+bool DBusManagerAdaptor::SetInstallType(const QString& app_id, const QString& install_type) {
+  auto record = registry_->by_id(app_id.toStdString());
+  if (!record) return false;
+  record->install_type = string_to_install_type(install_type);
+  registry_->save(*record);
   return true;
 }
 

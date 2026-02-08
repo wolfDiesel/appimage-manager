@@ -36,6 +36,8 @@ public Q_SLOTS:
   void SetLaunchSettings(const QString& app_id, const QString& args,
                          const QStringList& env, const QString& sandbox);
   bool RemoveAppImage(const QString& app_id);
+  bool SetRecordName(const QString& app_id, const QString& name);
+  bool SetInstallType(const QString& app_id, const QString& install_type);
 
 private:
   domain::RegistryRepository* registry_;

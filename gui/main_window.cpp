@@ -7,11 +7,18 @@
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QMessageBox>
+#include <QDateTime>
 #include <QProcess>
 #include <QDBusArgument>
 #include <QDBusReply>
 #include <QDBusConnection>
 #include <QResizeEvent>
+#include <QProcess>
+#include <QRegularExpression>
+#include <QMenu>
+#include <QEvent>
+#include <QKeyEvent>
+#include <QMouseEvent>
 
 namespace appimage_manager::gui {
 
@@ -42,25 +49,22 @@ void MainWindow::setup_ui() {
   auto* daemon_box = new QGroupBox(tr("Daemon"), this);
   auto* daemon_layout = new QHBoxLayout(daemon_box);
   status_label_ = new QLabel(tr("Daemon: checking..."), this);
-  start_btn_ = new QPushButton(tr("Start"), this);
-  stop_btn_ = new QPushButton(tr("Stop"), this);
-  restart_btn_ = new QPushButton(tr("Restart"), this);
-  autostart_btn_ = new QPushButton(tr("Autostart"), this);
-  refresh_btn_ = new QPushButton(tr("Refresh list"), this);
+  daemon_btn_ = new QPushButton(tr("Daemon..."), this);
+  QMenu* daemon_menu = new QMenu(this);
+  start_act_ = daemon_menu->addAction(tr("Start"), this, &MainWindow::start_daemon);
+  stop_act_ = daemon_menu->addAction(tr("Stop"), this, &MainWindow::stop_daemon);
+  restart_act_ = daemon_menu->addAction(tr("Restart"), this, &MainWindow::restart_daemon);
+  autostart_act_ = daemon_menu->addAction(tr("Enable autostart"), this, &MainWindow::toggle_autostart);
+  daemon_menu->addSeparator();
+  refresh_act_ = daemon_menu->addAction(tr("Refresh list"), this, &MainWindow::refresh_list);
+  daemon_menu->addAction(tr("Watch directories..."), this, &MainWindow::open_watch_directories);
+  daemon_btn_->setMenu(daemon_menu);
   daemon_layout->addWidget(status_label_);
-  daemon_layout->addWidget(start_btn_);
-  daemon_layout->addWidget(stop_btn_);
-  daemon_layout->addWidget(restart_btn_);
-  daemon_layout->addWidget(autostart_btn_);
-  daemon_layout->addWidget(refresh_btn_);
-  app_settings_btn_ = new QPushButton(tr("App settings..."), this);
-  watch_dirs_btn_ = new QPushButton(tr("Watch directories..."), this);
+  daemon_layout->addWidget(daemon_btn_);
   install_btn_ = new QPushButton(tr("Install AppImage..."), this);
-  remove_btn_ = new QPushButton(tr("Remove..."), this);
-  daemon_layout->addWidget(app_settings_btn_);
-  daemon_layout->addWidget(watch_dirs_btn_);
+  run_btn_ = new QPushButton(tr("Run"), this);
   daemon_layout->addWidget(install_btn_);
-  daemon_layout->addWidget(remove_btn_);
+  daemon_layout->addWidget(run_btn_);
   daemon_layout->addStretch();
   layout->addWidget(daemon_box);
 
@@ -70,22 +74,71 @@ void MainWindow::setup_ui() {
   table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
   table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
   table_->setSortingEnabled(true);
+  table_->horizontalHeader()->setStretchLastSection(false);
+  table_->setContextMenuPolicy(Qt::CustomContextMenu);
   layout->addWidget(table_);
   update_table_last_column_width();
+  table_->installEventFilter(this);
 
   setCentralWidget(central);
   setWindowTitle(tr("AppImage Manager"));
   resize(700, 400);
 
-  connect(start_btn_, &QPushButton::clicked, this, &MainWindow::start_daemon);
-  connect(stop_btn_, &QPushButton::clicked, this, &MainWindow::stop_daemon);
-  connect(restart_btn_, &QPushButton::clicked, this, &MainWindow::restart_daemon);
-  connect(autostart_btn_, &QPushButton::clicked, this, &MainWindow::toggle_autostart);
-  connect(refresh_btn_, &QPushButton::clicked, this, &MainWindow::refresh_list);
-  connect(app_settings_btn_, &QPushButton::clicked, this, &MainWindow::open_app_settings);
-  connect(watch_dirs_btn_, &QPushButton::clicked, this, &MainWindow::open_watch_directories);
   connect(install_btn_, &QPushButton::clicked, this, &MainWindow::open_install_dialog);
-  connect(remove_btn_, &QPushButton::clicked, this, &MainWindow::remove_app);
+  connect(run_btn_, &QPushButton::clicked, this, &MainWindow::run_app);
+  connect(table_, &QTableWidget::itemChanged, this, &MainWindow::on_table_item_changed);
+  connect(table_, &QTableWidget::customContextMenuRequested, this, &MainWindow::show_table_context_menu);
+}
+
+bool MainWindow::eventFilter(QObject* obj, QEvent* e) {
+  if (obj == table_) {
+    if (e->type() == QEvent::KeyPress) {
+      auto* ke = static_cast<QKeyEvent*>(e);
+      if (ke->key() == Qt::Key_F2) {
+        start_rename_at_current_row();
+        return true;
+      }
+      if (ke->key() == Qt::Key_Delete) {
+        remove_app();
+        return true;
+      }
+    }
+    if (e->type() == QEvent::MouseButtonDblClick) {
+      run_app();
+      return true;
+    }
+  }
+  return QMainWindow::eventFilter(obj, e);
+}
+
+void MainWindow::start_rename_at_current_row() {
+  int row = table_->currentRow();
+  if (row < 0) return;
+  refresh_skip_until_ = QDateTime::currentMSecsSinceEpoch() + 60000;
+  table_->setCurrentCell(row, 0);
+  table_->editItem(table_->item(row, 0));
+}
+
+void MainWindow::show_table_context_menu(const QPoint& pos) {
+  QTableWidgetItem* item = table_->itemAt(pos);
+  if (!item) return;
+  int row = item->row();
+  table_->setCurrentCell(row, 0);
+  table_->selectRow(row);
+  QMenu menu(this);
+  QAction* run_act = menu.addAction(tr("Run"));
+  QAction* rename_act = menu.addAction(tr("Rename"));
+  QAction* settings_act = menu.addAction(tr("App settings..."));
+  QAction* remove_act = menu.addAction(tr("Remove..."));
+  QAction* chosen = menu.exec(table_->viewport()->mapToGlobal(pos));
+  if (chosen == run_act)
+    run_app();
+  else if (chosen == rename_act)
+    start_rename_at_current_row();
+  else if (chosen == settings_act)
+    open_app_settings();
+  else if (chosen == remove_act)
+    remove_app();
 }
 
 bool MainWindow::is_daemon_running() const {
@@ -101,6 +154,10 @@ void MainWindow::refresh_daemon_status() {
   if (!running) {
     table_->setRowCount(0);
     status_label_->setText(tr("Daemon: not running"));
+    return;
+  }
+  if (refresh_skip_until_ > 0 && QDateTime::currentMSecsSinceEpoch() < refresh_skip_until_) {
+    status_label_->setText(tr("Daemon: running (%1 app(s))").arg(table_->rowCount()));
     return;
   }
   if (!refresh_list())
@@ -121,11 +178,11 @@ bool MainWindow::is_autostart_enabled() const {
 
 void MainWindow::update_daemon_buttons() {
   bool running = is_daemon_running();
-  start_btn_->setEnabled(!running);
-  stop_btn_->setEnabled(running);
-  restart_btn_->setEnabled(running);
-  refresh_btn_->setEnabled(running);
-  autostart_btn_->setText(is_autostart_enabled() ? tr("Disable autostart") : tr("Enable autostart"));
+  start_act_->setEnabled(!running);
+  stop_act_->setEnabled(running);
+  restart_act_->setEnabled(running);
+  refresh_act_->setEnabled(running);
+  autostart_act_->setText(is_autostart_enabled() ? tr("Disable autostart") : tr("Enable autostart"));
 }
 
 void MainWindow::update_table_last_column_width() {
@@ -144,6 +201,7 @@ bool MainWindow::refresh_list() {
   if (!reply.isValid()) return false;
   QString saved_id = selected_app_id();
   const QVariantList list = reply.value();
+  suppress_name_edit_ = true;
   table_->setSortingEnabled(false);
   table_->setRowCount(0);
   for (const QVariant& v : list) {
@@ -153,11 +211,13 @@ bool MainWindow::refresh_list() {
     table_->insertRow(row);
     auto* name_item = new QTableWidgetItem(m.value(QStringLiteral("name")).toString());
     name_item->setData(Qt::UserRole, id);
+    name_item->setFlags(name_item->flags() | Qt::ItemIsEditable);
     table_->setItem(row, 0, name_item);
     table_->setItem(row, 1, new QTableWidgetItem(m.value(QStringLiteral("path")).toString()));
     table_->setItem(row, 2, new QTableWidgetItem(m.value(QStringLiteral("install_type")).toString()));
   }
   table_->setSortingEnabled(true);
+  suppress_name_edit_ = false;
   table_->sortByColumn(0, Qt::AscendingOrder);
   if (!saved_id.isEmpty()) {
     for (int row = 0; row < table_->rowCount(); ++row) {
@@ -287,6 +347,61 @@ void MainWindow::remove_app() {
   
   QMessageBox::information(this, tr("Done"), tr("AppImage removed successfully."));
   refresh_list();
+}
+
+void MainWindow::run_app() {
+  QString id = selected_app_id();
+  if (id.isEmpty()) {
+    QMessageBox::information(this, tr("Run"), tr("Select an application first."));
+    return;
+  }
+  QList<QTableWidgetItem*> sel = table_->selectedItems();
+  int row = table_->row(sel.first());
+  QTableWidgetItem* path_item = table_->item(row, 1);
+  if (!path_item) return;
+  QString path = path_item->text().trimmed();
+  if (path.isEmpty()) return;
+  QStringList args_list;
+  if (dbus_->isValid()) {
+    QDBusReply<QVariantMap> reply = dbus_->call(QStringLiteral("GetLaunchSettings"), id);
+    if (reply.isValid()) {
+      QString args = reply.value().value(QStringLiteral("args")).toString().trimmed();
+      if (!args.isEmpty()) {
+        for (const QString& part : args.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts))
+          args_list << part;
+      }
+    }
+  }
+  if (!QProcess::startDetached(path, args_list)) {
+    QMessageBox::warning(this, tr("Run"), tr("Failed to start: %1").arg(path));
+  }
+}
+
+void MainWindow::on_table_item_changed(QTableWidgetItem* item) {
+  if (suppress_name_edit_ || !item || item->column() != 0) return;
+  int row = item->row();
+  QTableWidgetItem* name_item = table_->item(row, 0);
+  if (!name_item) return;
+  QString id = name_item->data(Qt::UserRole).toString();
+  if (id.isEmpty()) return;
+  QString new_name = name_item->text().trimmed();
+  if (new_name.isEmpty()) return;
+  if (!dbus_->isValid()) return;
+  QDBusReply<bool> reply = dbus_->call(QStringLiteral("SetRecordName"), id, new_name);
+  if (!reply.isValid()) {
+    QMessageBox::warning(this, tr("Rename"),
+      tr("Failed to rename: %1").arg(reply.error().message()));
+    refresh_skip_until_ = 0;
+    if (is_daemon_running())
+      refresh_list();
+  } else if (!reply.value()) {
+    QMessageBox::warning(this, tr("Rename"), tr("Failed to rename."));
+    refresh_skip_until_ = 0;
+    if (is_daemon_running())
+      refresh_list();
+  } else {
+    refresh_skip_until_ = 0;
+  }
 }
 
 }

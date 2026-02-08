@@ -16,6 +16,10 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QLabel>
+#include <QTimer>
+#include <QEventLoop>
+#include <QCryptographicHash>
+#include <QRegularExpression>
 #include <QKeyEvent>
 #include <QEvent>
 
@@ -274,10 +278,21 @@ void InstallAppImageDialog::handle_releases_response(const QJsonArray& releases)
     QMessageBox::warning(this, tr("Error"), tr("No asset selected."));
     return;
   }
-  start_download(QUrl(url), name);
+  QUrl sha256_url;
+  for (const QJsonValue& v : assets) {
+    QJsonObject a = v.toObject();
+    QString aname = a.value(QStringLiteral("name")).toString();
+    if (aname.compare(name + QStringLiteral(".sha256"), Qt::CaseInsensitive) == 0 ||
+        aname.compare(name + QStringLiteral(".SHA256"), Qt::CaseInsensitive) == 0) {
+      sha256_url = QUrl(a.value(QStringLiteral("browser_download_url")).toString());
+      break;
+    }
+  }
+  start_download(QUrl(url), name, sha256_url);
 }
 
 void InstallAppImageDialog::start_install() {
+  installed_from_github_ = false;
   const QString target = target_dir_combo_->currentData().toString();
   if (target.isEmpty()) {
     QMessageBox::warning(this, tr("Error"), tr("Select a target directory."));
@@ -323,16 +338,18 @@ void InstallAppImageDialog::fetch_github_releases_finished() {
     QMessageBox::warning(this, tr("Error"), tr("Invalid GitHub response."));
     return;
   }
+  installed_from_github_ = true;
   handle_releases_response(doc.array());
 }
 
-void InstallAppImageDialog::start_download(const QUrl& url, const QString& suggested_name) {
+void InstallAppImageDialog::start_download(const QUrl& url, const QString& suggested_name, const QUrl& sha256_url) {
   const QString target_dir = target_dir_combo_->currentData().toString();
   if (target_dir.isEmpty()) return;
   QString name = suggested_name;
   if (name.isEmpty() || !name.endsWith(QLatin1String(".AppImage"), Qt::CaseInsensitive))
     name = QStringLiteral("downloaded.AppImage");
-  target_path_ = target_dir + QLatin1Char('/') + name;
+  target_path_ = QDir::cleanPath(target_dir + QLatin1Char('/') + name);
+  expected_sha256_url_ = sha256_url;
   QString part_path = target_path_ + QStringLiteral(".part");
   output_file_ = new QFile(part_path, this);
   if (!output_file_->open(QIODevice::WriteOnly)) {
@@ -394,10 +411,80 @@ void InstallAppImageDialog::download_finished() {
       QMessageBox::warning(this, tr("Error"), tr("Download failed: %1").arg(reply->errorString()));
     return;
   }
+  if (expected_sha256_url_.isValid()) {
+    QNetworkRequest req(expected_sha256_url_);
+    req.setRawHeader("User-Agent", github_user_agent);
+    QNetworkReply* sha_reply = nam_->get(req);
+    QEventLoop loop;
+    connect(sha_reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+    QByteArray sha_content = sha_reply->readAll().trimmed();
+    sha_reply->deleteLater();
+    QString sha_line = QString::fromUtf8(sha_content);
+    QRegularExpression hex_re(QStringLiteral("([a-fA-F0-9]{64})"));
+    QRegularExpressionMatch m = hex_re.match(sha_line);
+    QString expected_sha = m.hasMatch() ? m.captured(1).toLower() : QString();
+    if (!expected_sha.isEmpty()) {
+      QFile f(target_path_);
+      if (!f.open(QIODevice::ReadOnly)) {
+        QFile::remove(target_path_);
+        QMessageBox::warning(this, tr("Checksum error"), tr("Cannot read downloaded file."));
+        return;
+      }
+      QCryptographicHash hash(QCryptographicHash::Sha256);
+      if (!hash.addData(&f)) {
+        f.close();
+        QFile::remove(target_path_);
+        QMessageBox::warning(this, tr("Checksum error"), tr("Cannot compute checksum."));
+        return;
+      }
+      f.close();
+      QString actual_sha = QString::fromUtf8(hash.result().toHex());
+      if (actual_sha != expected_sha) {
+        QFile::remove(target_path_);
+        QMessageBox::warning(this, tr("Checksum error"),
+          tr("SHA256 mismatch.\nExpected: %1\nGot: %2").arg(expected_sha, actual_sha));
+        return;
+      }
+    }
+  }
   if (dbus_ && dbus_->isValid())
     dbus_->call(QStringLiteral("TriggerRescan"));
+  if (installed_from_github_) {
+    github_mark_attempts_ = 0;
+    QMessageBox::information(this, tr("Done"), tr("Downloaded to %1. Daemon will add it to the list.").arg(target_path_));
+    QTimer::singleShot(2000, this, &InstallAppImageDialog::try_mark_github_download);
+    return;
+  }
   QMessageBox::information(this, tr("Done"), tr("Downloaded to %1. Daemon will add it to the list.").arg(target_path_));
   accept();
+}
+
+void InstallAppImageDialog::try_mark_github_download() {
+  if (!dbus_ || !dbus_->isValid() || target_path_.isEmpty()) {
+    accept();
+    return;
+  }
+  QDBusReply<QVariantList> reply = dbus_->call(QStringLiteral("GetAllRecords"));
+  if (!reply.isValid()) {
+    accept();
+    return;
+  }
+  const QVariantList list = reply.value();
+  const QString target_norm = QDir::cleanPath(target_path_);
+  for (const QVariant& v : list) {
+    QVariantMap m = v.toMap();
+    if (QDir::cleanPath(m.value(QStringLiteral("path")).toString()) == target_norm) {
+      QString id = m.value(QStringLiteral("id")).toString();
+      QDBusReply<bool> set_reply = dbus_->call(QStringLiteral("SetInstallType"), id, QStringLiteral("GitHub"));
+      accept();
+      return;
+    }
+  }
+  if (++github_mark_attempts_ < 15)
+    QTimer::singleShot(1000, this, &InstallAppImageDialog::try_mark_github_download);
+  else
+    accept();
 }
 
 }
