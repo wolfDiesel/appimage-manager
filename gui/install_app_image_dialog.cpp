@@ -9,12 +9,15 @@
 #include <QMessageBox>
 #include <QNetworkRequest>
 #include <QUrl>
+#include <QUrlQuery>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QFileInfo>
 #include <QDir>
 #include <QLabel>
+#include <QKeyEvent>
+#include <QEvent>
 
 namespace appimage_manager::gui {
 
@@ -33,6 +36,19 @@ InstallAppImageDialog::InstallAppImageDialog(QDBusInterface* dbus, QWidget* pare
 
   auto* source_group = new QGroupBox(tr("Source"), this);
   auto* source_layout = new QVBoxLayout(source_group);
+
+  auto* search_layout = new QHBoxLayout();
+  github_search_edit_ = new QLineEdit(this);
+  github_search_edit_->setPlaceholderText(tr("Search GitHub by name..."));
+  github_search_btn_ = new QPushButton(tr("Search"), this);
+  search_layout->addWidget(github_search_edit_);
+  search_layout->addWidget(github_search_btn_);
+  source_layout->addLayout(search_layout);
+  github_search_list_ = new QListWidget(this);
+  github_search_list_->setMaximumHeight(140);
+  github_search_list_->setVisible(false);
+  source_layout->addWidget(github_search_list_);
+
   github_radio_ = new QRadioButton(tr("GitHub (username/repository)"), this);
   github_edit_ = new QLineEdit(this);
   github_edit_->setPlaceholderText(QStringLiteral("owner/repo"));
@@ -45,6 +61,11 @@ InstallAppImageDialog::InstallAppImageDialog(QDBusInterface* dbus, QWidget* pare
   source_layout->addWidget(url_radio_);
   source_layout->addWidget(url_edit_);
   layout->addWidget(source_group);
+
+  connect(github_search_btn_, &QPushButton::clicked, this, &InstallAppImageDialog::run_github_search);
+  connect(github_search_edit_, &QLineEdit::returnPressed, this, &InstallAppImageDialog::run_github_search);
+  connect(github_search_list_, &QListWidget::itemDoubleClicked, this, &InstallAppImageDialog::on_github_search_double_clicked);
+  github_search_edit_->installEventFilter(this);
 
   auto* target_layout = new QHBoxLayout();
   target_layout->addWidget(new QLabel(tr("Save to directory:"), this));
@@ -75,6 +96,17 @@ InstallAppImageDialog::InstallAppImageDialog(QDBusInterface* dbus, QWidget* pare
   load_watch_directories();
 }
 
+bool InstallAppImageDialog::eventFilter(QObject* obj, QEvent* e) {
+  if (obj == github_search_edit_ && e->type() == QEvent::KeyPress) {
+    auto* ke = static_cast<QKeyEvent*>(e);
+    if (ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter) {
+      run_github_search();
+      return true;
+    }
+  }
+  return QDialog::eventFilter(obj, e);
+}
+
 void InstallAppImageDialog::load_watch_directories() {
   target_dir_combo_->clear();
   if (!dbus_ || !dbus_->isValid()) return;
@@ -93,6 +125,9 @@ void InstallAppImageDialog::set_busy(bool busy) {
   progress_->setVisible(busy);
   install_btn_->setEnabled(!busy);
   github_edit_->setEnabled(!busy);
+  github_search_edit_->setEnabled(!busy);
+  github_search_btn_->setEnabled(!busy);
+  github_search_list_->setEnabled(!busy);
   url_edit_->setEnabled(!busy);
   github_radio_->setEnabled(!busy);
   url_radio_->setEnabled(!busy);
@@ -115,6 +150,131 @@ QString InstallAppImageDialog::github_releases_url(const QString& spec) const {
   int i = s.indexOf(QLatin1Char('/'));
   if (i <= 0 || i == s.size() - 1) return QString();
   return QStringLiteral("https://api.github.com/repos/%1/releases?per_page=10").arg(s);
+}
+
+void InstallAppImageDialog::run_github_search() {
+  QString q = github_search_edit_->text().trimmed();
+  if (q.isEmpty()) {
+    QMessageBox::warning(this, tr("Error"), tr("Enter a search query."));
+    return;
+  }
+  q.replace(QLatin1Char('*'), QLatin1Char(' '));
+  q = q.split(QLatin1Char(' '), Qt::SkipEmptyParts).join(QLatin1Char(' '));
+  if (q.isEmpty()) {
+    QMessageBox::warning(this, tr("Error"), tr("Enter a search query."));
+    return;
+  }
+  set_busy(true);
+  progress_->setRange(0, 0);
+  QUrl url(QStringLiteral("https://api.github.com/search/repositories"));
+  QUrlQuery query;
+  query.addQueryItem(QStringLiteral("q"), q);
+  query.addQueryItem(QStringLiteral("per_page"), QStringLiteral("15"));
+  url.setQuery(query);
+  QNetworkRequest req(url);
+  req.setRawHeader("User-Agent", github_user_agent);
+  req.setRawHeader("Accept", "application/vnd.github.v3+json");
+  QNetworkReply* reply = nam_->get(req);
+  connect(reply, &QNetworkReply::finished, this, &InstallAppImageDialog::fetch_github_search_finished);
+  active_reply_ = reply;
+}
+
+void InstallAppImageDialog::fetch_github_search_finished() {
+  QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+  if (!reply) return;
+  reply->deleteLater();
+  active_reply_ = nullptr;
+  set_busy(false);
+  if (reply->error() != QNetworkReply::NoError) {
+    QMessageBox::warning(this, tr("Error"), tr("GitHub search failed: %1").arg(reply->errorString()));
+    return;
+  }
+  QJsonParseError err;
+  QJsonDocument doc = QJsonDocument::fromJson(reply->readAll(), &err);
+  if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+    QMessageBox::warning(this, tr("Error"), tr("Invalid GitHub response."));
+    return;
+  }
+  QJsonArray items = doc.object().value(QStringLiteral("items")).toArray();
+  github_search_list_->clear();
+  for (const QJsonValue& v : items) {
+    QJsonObject repo = v.toObject();
+    QString full_name = repo.value(QStringLiteral("full_name")).toString();
+    QString desc = repo.value(QStringLiteral("description")).toString();
+    if (full_name.isEmpty()) continue;
+    QString display = full_name;
+    if (!desc.isEmpty())
+      display += QStringLiteral(" — ") + desc;
+    auto* item = new QListWidgetItem(display, github_search_list_);
+    item->setData(Qt::UserRole, full_name);
+  }
+  github_search_list_->setVisible(github_search_list_->count() > 0);
+  if (github_search_list_->count() == 0)
+    QMessageBox::information(this, tr("Search"), tr("No repositories found."));
+}
+
+void InstallAppImageDialog::on_github_search_double_clicked(QListWidgetItem* item) {
+  if (!item) return;
+  QString full_name = item->data(Qt::UserRole).toString();
+  if (full_name.isEmpty()) return;
+  fetch_releases_for_repo(full_name);
+}
+
+void InstallAppImageDialog::fetch_releases_for_repo(const QString& full_name) {
+  QString api_url = QStringLiteral("https://api.github.com/repos/%1/releases?per_page=10").arg(full_name);
+  set_busy(true);
+  progress_->setRange(0, 0);
+  QNetworkRequest req{QUrl(api_url)};
+  req.setRawHeader("User-Agent", github_user_agent);
+  req.setRawHeader("Accept", "application/vnd.github.v3+json");
+  QNetworkReply* reply = nam_->get(req);
+  reply->setProperty("repo_full_name", full_name);
+  connect(reply, &QNetworkReply::finished, this, &InstallAppImageDialog::fetch_github_releases_for_search_finished);
+  active_reply_ = reply;
+}
+
+void InstallAppImageDialog::fetch_github_releases_for_search_finished() {
+  QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+  if (!reply) return;
+  reply->deleteLater();
+  active_reply_ = nullptr;
+  set_busy(false);
+  if (reply->error() != QNetworkReply::NoError) {
+    QMessageBox::warning(this, tr("Error"), tr("Failed to fetch releases: %1").arg(reply->errorString()));
+    return;
+  }
+  QJsonParseError err;
+  QJsonDocument doc = QJsonDocument::fromJson(reply->readAll(), &err);
+  if (err.error != QJsonParseError::NoError || !doc.isArray()) {
+    QMessageBox::warning(this, tr("Error"), tr("Invalid GitHub response."));
+    return;
+  }
+  handle_releases_response(doc.array());
+}
+
+void InstallAppImageDialog::handle_releases_response(const QJsonArray& releases) {
+  if (releases.isEmpty()) {
+    QMessageBox::warning(this, tr("Error"), tr("No releases found for this repository."));
+    return;
+  }
+  GitHubReleaseSelector selector(releases, this);
+  if (selector.exec() != QDialog::Accepted)
+    return;
+  QJsonArray assets = selector.selected_assets();
+  if (assets.isEmpty()) {
+    QMessageBox::warning(this, tr("Error"), tr("Selected release has no assets."));
+    return;
+  }
+  AppImageAssetSelector asset_selector(assets, this);
+  if (asset_selector.exec() != QDialog::Accepted)
+    return;
+  QString url = asset_selector.selected_url();
+  QString name = asset_selector.selected_name();
+  if (url.isEmpty() || name.isEmpty()) {
+    QMessageBox::warning(this, tr("Error"), tr("No asset selected."));
+    return;
+  }
+  start_download(QUrl(url), name);
 }
 
 void InstallAppImageDialog::start_install() {
@@ -163,34 +323,7 @@ void InstallAppImageDialog::fetch_github_releases_finished() {
     QMessageBox::warning(this, tr("Error"), tr("Invalid GitHub response."));
     return;
   }
-  QJsonArray releases = doc.array();
-  if (releases.isEmpty()) {
-    QMessageBox::warning(this, tr("Error"), tr("No releases found for this repository."));
-    return;
-  }
-  
-  GitHubReleaseSelector selector(releases, this);
-  if (selector.exec() != QDialog::Accepted)
-    return;
-  
-  QJsonArray assets = selector.selected_assets();
-  if (assets.isEmpty()) {
-    QMessageBox::warning(this, tr("Error"), tr("Selected release has no assets."));
-    return;
-  }
-  
-  AppImageAssetSelector asset_selector(assets, this);
-  if (asset_selector.exec() != QDialog::Accepted)
-    return;
-  
-  QString url = asset_selector.selected_url();
-  QString name = asset_selector.selected_name();
-  if (url.isEmpty() || name.isEmpty()) {
-    QMessageBox::warning(this, tr("Error"), tr("No asset selected."));
-    return;
-  }
-  
-  start_download(QUrl(url), name);
+  handle_releases_response(doc.array());
 }
 
 void InstallAppImageDialog::start_download(const QUrl& url, const QString& suggested_name) {
